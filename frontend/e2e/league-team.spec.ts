@@ -1,4 +1,4 @@
-import { expect, settled, test } from "./fixtures";
+import { api, expect, settled, test } from "./fixtures";
 
 test.describe("league page", () => {
   test("table, matches, player stats, team stats", async ({ page }) => {
@@ -107,7 +107,7 @@ test.describe("team page", () => {
   });
 
   test("team calendar feed is valid", async ({ request }) => {
-    const res = await request.get("/api/calendar/teams/kairat.ics?lang=en");
+    const res = await request.get(api("/calendar/teams/kairat.ics?lang=en"));
     expect(res.ok()).toBeTruthy();
     const body = await res.text();
     expect(body.startsWith("BEGIN:VCALENDAR")).toBe(true);

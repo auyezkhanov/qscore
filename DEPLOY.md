@@ -78,7 +78,7 @@ gh repo create qscore --private --source . --push     # или создайте 
 
   ```bash
   cd frontend
-  E2E_BASE_URL=https://<ваш-проект>.vercel.app npx playwright test
+  E2E_BASE_URL=https://<ваш-проект>.vercel.app E2E_API_URL=https://<railway-домен>/api npx playwright test
   ```
 
 ## Частые проблемы

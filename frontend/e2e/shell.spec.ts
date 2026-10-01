@@ -1,4 +1,4 @@
-import { expect, settled, test } from "./fixtures";
+import { api, expect, settled, test } from "./fixtures";
 
 test.describe("app shell", () => {
   test("home: matches feed, date navigation, calendar and filters", async ({ page }) => {
@@ -93,7 +93,7 @@ test.describe("app shell", () => {
     // Clean up the account.
     const token = await page.evaluate(() => localStorage.getItem("qscore:token"));
     expect(token).toBeTruthy();
-    expect((await request.delete("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })).ok()).toBeTruthy();
+    expect((await request.delete(api("/auth/me"), { headers: { Authorization: `Bearer ${token}` } })).ok()).toBeTruthy();
   });
   test.beforeEach(async ({}, testInfo) => {
     // The wrong-password attempt is an expected 401.

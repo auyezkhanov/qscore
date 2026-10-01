@@ -2,6 +2,14 @@ import { test as base, expect, type APIRequestContext, type Page } from "@playwr
 
 type Lang = "ru" | "en";
 
+const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:15173";
+/**
+ * The API the site talks to: same-origin /api behind nginx (docker), or a separate
+ * host when the frontend is on Vercel and the API elsewhere (set E2E_API_URL).
+ */
+export const API_URL = (process.env.E2E_API_URL ?? `${BASE_URL}/api`).replace(/\/$/, "");
+export const api = (path: string) => `${API_URL}${path}`;
+
 export type TestIds = {
   /** A finished KPL match with full details (Kairat's last-but-one game). */
   finishedMatchId: string;
@@ -23,7 +31,7 @@ type Fixtures = {
 };
 
 async function apiJson<T>(request: APIRequestContext, path: string): Promise<T> {
-  const res = await request.get(`/api${path}`);
+  const res = await request.get(api(path));
   expect(res.ok(), `GET /api${path} -> ${res.status()}`).toBeTruthy();
   return (await res.json()) as T;
 }
@@ -73,7 +81,7 @@ export const test = base.extend<Fixtures, { idsWorker: TestIds }>({
 
   idsWorker: [
     async ({ playwright }, use) => {
-      const request = await playwright.request.newContext({ baseURL: process.env.E2E_BASE_URL ?? "http://localhost:15173" });
+      const request = await playwright.request.newContext({ baseURL: BASE_URL });
       const team = await apiJson<{ recentMatches: { id: string }[]; upcomingMatches: { id: string }[] }>(request, "/teams/kairat");
       const top = await apiJson<{ slug: string }[]>(request, "/leagues/kpl/top-players?stat=goals&limit=1");
       const keepers = await apiJson<{ slug: string }[]>(request, "/leagues/kpl/top-players?stat=saves&limit=1");
@@ -93,7 +101,7 @@ export const test = base.extend<Fixtures, { idsWorker: TestIds }>({
     const created: string[] = [];
     await use(async (page) => {
       const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-      const res = await request.post("/api/auth/register", { data: { email, password: "e2e-password-123" } });
+      const res = await request.post(api("/auth/register"), { data: { email, password: "e2e-password-123" } });
       expect(res.status()).toBe(201);
       const { token } = (await res.json()) as { token: string };
       created.push(token);
@@ -101,7 +109,7 @@ export const test = base.extend<Fixtures, { idsWorker: TestIds }>({
       return { email, token };
     });
     // Clean up: account deletion cascades to favourites, predictions and votes.
-    for (const token of created) await request.delete("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+    for (const token of created) await request.delete(api("/auth/me"), { headers: { Authorization: `Bearer ${token}` } });
   },
 });
 
