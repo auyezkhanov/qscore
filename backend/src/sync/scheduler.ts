@@ -51,9 +51,15 @@ export async function startScheduler() {
 
   if (env.TM_SYNC_ENABLED) {
     const checkTm = () => void runTransfermarktIfDue().catch((err) => log.warn("transfermarkt check failed", err));
-    // Give the initial full sync a head start, then check hourly.
-    timers.push(setTimeout(checkTm, 5 * 60 * 1000));
-    timers.push(setInterval(checkTm, HOUR_MS));
+    // Give the initial full sync a head start, then check every minute. The check is
+    // one cheap query and a no-op until the job is due; checking often means a tick
+    // skipped because another job held the lock is retried a minute later, not an hour.
+    timers.push(
+      setTimeout(() => {
+        checkTm();
+        timers.push(setInterval(checkTm, 60 * 1000));
+      }, 5 * 60 * 1000),
+    );
   }
 }
 
