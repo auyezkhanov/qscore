@@ -31,8 +31,20 @@ export async function startScheduler() {
     log.info("database is empty — bootstrapping from kffleague.kz (takes a few minutes)");
   }
   // Always start with a full pass: it fills an empty database and catches up
-  // on anything that changed while the server was down.
-  runFull();
+  // on anything that changed while the server was down. During a rolling deploy
+  // the old instance may still hold the sync lock (or a killed one's lease has not
+  // expired yet), so keep retrying until this instance's pass has actually started
+  // instead of waiting for the next 6-hourly tick.
+  const bootAt = Date.now();
+  const catchUp = async () => {
+    await runExclusive("full", fullSync);
+    const run = await prisma.syncRun.findUnique({ where: { job: "full" }, select: { lastStartedAt: true } });
+    if (!run?.lastStartedAt || run.lastStartedAt.getTime() < bootAt) {
+      log.info("initial full sync deferred: sync lock is held elsewhere, retrying in 60s");
+      timers.push(setTimeout(() => void catchUp().catch((err) => log.warn("initial full sync check failed", err)), 60_000));
+    }
+  };
+  void catchUp().catch((err) => log.warn("initial full sync check failed", err));
 
   timers.push(setInterval(runLive, env.LIVE_SYNC_INTERVAL_SEC * 1000));
   timers.push(setInterval(runFull, env.FULL_SYNC_INTERVAL_MIN * 60 * 1000));
