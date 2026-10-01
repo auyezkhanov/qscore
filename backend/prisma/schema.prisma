@@ -1,0 +1,493 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  HALFTIME
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+enum EventType {
+  GOAL
+  OWN_GOAL
+  PENALTY_GOAL
+  PENALTY_MISSED
+  YELLOW_CARD
+  RED_CARD
+  SECOND_YELLOW
+  SUBSTITUTION
+}
+
+enum TransferDirection {
+  IN
+  OUT
+}
+
+enum Position {
+  GK
+  DF
+  MF
+  FW
+}
+
+model League {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  /// Source championship code on kffleague.kz ("pl", "1l").
+  externalCode String   @unique
+  name         String
+  nameEn       String
+  country      String
+  tier         Int
+  seasons      Season[]
+}
+
+model Season {
+  id           String     @id @default(cuid())
+  externalId   Int        @unique
+  year         Int
+  isCurrent    Boolean    @default(false)
+  currentRound Int?
+  totalRounds  Int?
+  leagueId     String
+  league       League     @relation(fields: [leagueId], references: [id])
+  matches      Match[]
+  standings    Standing[]
+  transfers    Transfer[]
+  playerStats  PlayerSeasonStat[]
+
+  @@unique([leagueId, year])
+}
+
+model Team {
+  id              String      @id @default(cuid())
+  externalId      Int         @unique
+  slug            String      @unique
+  name            String
+  nameEn          String?
+  city            String?
+  stadium         String?
+  stadiumEn       String?
+  stadiumCapacity Int?
+  stadiumSurface  String?
+  primaryColor    String
+  logoUrl         String?
+  /// Transfermarkt club id and total squad market value (EUR).
+  tmId            Int?        @unique
+  squadValue      Int?
+  players         Player[]
+  seasonStats     PlayerSeasonStat[]
+  homeMatches     Match[]     @relation("HomeTeam")
+  awayMatches     Match[]     @relation("AwayTeam")
+  standings       Standing[]
+  lineups         Lineup[]
+  matchStats      MatchStat[]
+  transfersFor    Transfer[]  @relation("TransferTeam")
+  transfersVs     Transfer[]  @relation("TransferCounterTeam")
+}
+
+model Player {
+  id              String       @id @default(cuid())
+  externalId      Int          @unique
+  slug            String       @unique
+  name            String
+  nameEn          String?
+  position        Position
+  number          Int?
+  nationalityCode String?
+  nationality     String?
+  birthDate       DateTime?
+  photoUrl        String?
+  isActive        Boolean      @default(true)
+  teamId          String
+  team            Team         @relation(fields: [teamId], references: [id])
+  goals           Int          @default(0)
+  assists         Int          @default(0)
+  yellowCards     Int          @default(0)
+  redCards        Int          @default(0)
+  appearances     Int          @default(0)
+  minutesPlayed   Int          @default(0)
+  advancedStats   Json?
+  /// Transfermarkt player id, current market value (EUR) and contract end.
+  tmId            Int?         @unique
+  marketValue     Int?
+  contractUntil   DateTime?
+  heightCm        Int?
+  /// "left" | "right" | "both"
+  foot            String?
+  matchStats      PlayerMatchStat[]
+  seasonStats     PlayerSeasonStat[]
+  events          MatchEvent[] @relation("EventPlayer")
+  relatedEvents   MatchEvent[] @relation("EventRelatedPlayer")
+  lineups         Lineup[]
+  transfers       Transfer[]
+
+  @@index([teamId])
+  @@index([goals])
+  @@index([assists])
+}
+
+model Match {
+  id               String          @id @default(cuid())
+  externalId       Int             @unique
+  seasonId         String
+  season           Season          @relation(fields: [seasonId], references: [id])
+  round            Int
+  homeTeamId       String
+  homeTeam         Team            @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId       String
+  awayTeam         Team            @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homeScore        Int?
+  awayScore        Int?
+  homePenaltyScore Int?
+  awayPenaltyScore Int?
+  status           MatchStatus     @default(SCHEDULED)
+  minute           Int?
+  kickoff          DateTime
+  /// True when the source hasn't fixed the kickoff time yet (date only).
+  timeTbd          Boolean         @default(false)
+  stadium          String?
+  stadiumEn        String?
+  city             String?
+  referee          String?
+  attendance       Int?
+  homeFormation    String?
+  awayFormation    String?
+  youtubeUrl       String?
+  highlightsUrl    String?
+  hasDetails       Boolean         @default(false)
+  detailsSyncedAt  DateTime?
+  /// Bumped when the detail sync starts storing more data, to trigger a backfill.
+  detailsVersion   Int             @default(0)
+  homeCoach        String?
+  homeCoachEn      String?
+  awayCoach        String?
+  awayCoachEn      String?
+  /// [{ role, name, nameEn }] — referee team incl. VAR.
+  officials        Json?
+  /// [{ side, playerExternalId, name, nameEn, number, reason, matchesSuspended }]
+  absences         Json?
+  /// [{ name, logoUrl, type, url }]
+  broadcasters     Json?
+  previewSyncedAt  DateTime?
+  /// Last state push notifications were sent for, e.g. "LIVE 1-0".
+  notifiedState    String?
+  playerStats      PlayerMatchStat[]
+  votes            MatchVote[]
+  predictions      Prediction[]
+  updatedAt        DateTime        @updatedAt
+  events           MatchEvent[]
+  lineups          Lineup[]
+  stats            MatchStat[]
+  favoritedBy      FavoriteMatch[]
+
+  @@index([seasonId, round])
+  @@index([seasonId, status, kickoff])
+  @@index([kickoff])
+  @@index([homeTeamId, kickoff])
+  @@index([awayTeamId, kickoff])
+}
+
+model MatchEvent {
+  id                String    @id @default(cuid())
+  externalId        Int?
+  matchId           String
+  match             Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  type              EventType
+  minute            Int
+  addedTime         Int?
+  teamId            String
+  playerId          String?
+  player            Player?   @relation("EventPlayer", fields: [playerId], references: [id])
+  playerName        String?
+  relatedPlayerId   String?
+  relatedPlayer     Player?   @relation("EventRelatedPlayer", fields: [relatedPlayerId], references: [id])
+  relatedPlayerName String?
+
+  @@index([matchId])
+  @@index([playerId])
+}
+
+model Lineup {
+  id          String    @id @default(cuid())
+  matchId     String
+  match       Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team      @relation(fields: [teamId], references: [id])
+  playerId    String
+  player      Player    @relation(fields: [playerId], references: [id])
+  isStarting  Boolean   @default(true)
+  isCaptain   Boolean   @default(false)
+  position    Position?
+  shirtNumber Int?
+  gridX       Int?
+  gridY       Int?
+
+  @@unique([matchId, playerId])
+  @@index([playerId])
+}
+
+model MatchStat {
+  id            String @id @default(cuid())
+  matchId       String
+  match         Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId        String
+  team          Team   @relation(fields: [teamId], references: [id])
+  possession    Int
+  shots         Int
+  shotsOnTarget Int
+  corners       Int
+  fouls         Int
+  offsides      Int
+  yellowCards   Int
+  redCards      Int
+  passes        Int
+  passAccuracy  Int
+  saves         Int?
+  xg            Float?
+  keyPasses     Int?
+  crosses       Int?
+  shotsBlocked  Int?
+  shotsOnBar    Int?
+  freekicks     Int?
+  throwIns      Int?
+  passesToFinalThird Int?
+  passesProgressive  Int?
+
+  @@unique([matchId, teamId])
+}
+
+model Standing {
+  id           String  @id @default(cuid())
+  seasonId     String
+  season       Season  @relation(fields: [seasonId], references: [id])
+  teamId       String
+  team         Team    @relation(fields: [teamId], references: [id])
+  position     Int
+  played       Int
+  wins         Int
+  draws        Int
+  losses       Int
+  goalsFor     Int
+  goalsAgainst Int
+  points       Int
+  /// Most recent last, e.g. "W,D,L,W,W".
+  form         String  @default("")
+  zone         String?
+
+  @@unique([seasonId, teamId])
+  @@index([teamId])
+}
+
+model Transfer {
+  id                String            @id @default(cuid())
+  seasonId          String
+  season            Season            @relation(fields: [seasonId], references: [id])
+  teamId            String
+  team              Team              @relation("TransferTeam", fields: [teamId], references: [id])
+  direction         TransferDirection
+  counterTeamId     String?
+  counterTeam       Team?             @relation("TransferCounterTeam", fields: [counterTeamId], references: [id])
+  counterTeamName   String?
+  counterTeamLogo   String?
+  /// kffleague.kz player id; null for transfers known only from Transfermarkt.
+  playerExternalId  Int?
+  /// "kff" (primary) or "tm" (a move kffleague.kz does not list).
+  source            String            @default("kff")
+  tmPlayerId        Int?
+  playerId          String?
+  player            Player?           @relation(fields: [playerId], references: [id])
+  playerName        String
+  playerNameEn      String?
+  playerPhotoUrl    String?
+  playerPosition    Position?
+  playerAge         Int?
+  playerNationalityCode String?
+  playerNationality String?
+  /// From Transfermarkt: FEE | LOAN_FEE | LOAN | FREE | END_OF_LOAN | UNKNOWN; amount in EUR.
+  feeType           String?
+  feeAmount         Int?
+  /// Player market value (EUR) at the time of the transfer.
+  marketValue       Int?
+  tmTransferId      Int?
+  /// Counterpart club as Transfermarkt names it; fills in when kffleague.kz leaves it blank.
+  tmCounterTeamName String?
+  createdAt        DateTime          @default(now())
+
+  @@unique([seasonId, teamId, direction, playerExternalId])
+  @@unique([seasonId, teamId, direction, tmPlayerId])
+  @@index([seasonId, direction])
+  @@index([teamId])
+  @@index([counterTeamId])
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  createdAt    DateTime        @default(now())
+  favorites    FavoriteMatch[]
+  predictions  Prediction[]
+  pushSubscriptions PushSubscription[]
+}
+
+model FavoriteMatch {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, matchId])
+}
+
+model TranslationCache {
+  key        String   @id
+  targetLang String
+  translated String
+  createdAt  DateTime @default(now())
+}
+
+/// Bookkeeping for background sync jobs, surfaced on /api/health.
+model SyncRun {
+  job           String    @id
+  lastStartedAt DateTime?
+  lastSuccessAt DateTime?
+  lastError     String?
+}
+
+/// One player's numbers in one match (from the source's per-match player stats).
+model PlayerMatchStat {
+  id              String  @id @default(cuid())
+  matchId         String
+  match           Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId        String
+  player          Player  @relation(fields: [playerId], references: [id])
+  teamId          String
+  minutes         Int
+  started         Boolean
+  goals           Int     @default(0)
+  assists         Int     @default(0)
+  shots           Int     @default(0)
+  shotsOnTarget   Int     @default(0)
+  xg              Float   @default(0)
+  passes          Int     @default(0)
+  passesAccurate  Int     @default(0)
+  keyPasses       Int     @default(0)
+  crosses         Int     @default(0)
+  dribbles        Int     @default(0)
+  dribblesWon     Int     @default(0)
+  tackles         Int     @default(0)
+  interceptions   Int     @default(0)
+  recoveries      Int     @default(0)
+  duels           Int     @default(0)
+  duelsWon        Int     @default(0)
+  fouls           Int     @default(0)
+  foulsSuffered   Int     @default(0)
+  offsides        Int     @default(0)
+  saves           Int     @default(0)
+  goalsConceded   Int     @default(0)
+  yellowCards     Int     @default(0)
+  redCards        Int     @default(0)
+  ownGoals        Int     @default(0)
+  /// Qscore rating 3.0–10.0; null when the player barely featured.
+  rating          Float?
+
+  @@unique([matchId, playerId])
+  @@index([playerId])
+}
+
+/// "Who will win?" poll. voterId is the user id or an anonymous device id.
+model MatchVote {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  voterId   String
+  /// "home" | "draw" | "away"
+  choice    String
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, voterId])
+}
+
+/// Score predictions for the predictor game.
+model Prediction {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  homeScore Int
+  awayScore Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, matchId])
+  @@index([matchId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  lang      String   @default("ru")
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Our team ids the device follows.
+  teamIds   String[]
+  /// Matches the device follows (favourites).
+  matchIds  String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamIds], type: Gin)
+  @@index([matchIds], type: Gin)
+}
+
+/// Small key/value store for generated server settings (e.g. VAPID keys).
+model AppSetting {
+  key   String @id
+  value String
+}
+
+/// A player's numbers for one club in one league season, as the source lists them.
+/// A player can have several rows in a season (transfer, reserve side).
+model PlayerSeasonStat {
+  id            String  @id @default(cuid())
+  playerId      String
+  player        Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  seasonId      String
+  season        Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId        String
+  team          Team    @relation(fields: [teamId], references: [id])
+  /// On the club's current roster (vs. only in its season stats after leaving).
+  onRoster      Boolean @default(false)
+  goals         Int     @default(0)
+  assists       Int     @default(0)
+  yellowCards   Int     @default(0)
+  redCards      Int     @default(0)
+  appearances   Int     @default(0)
+  minutesPlayed Int     @default(0)
+  advancedStats Json?
+
+  @@unique([playerId, seasonId, teamId])
+  @@index([seasonId])
+  @@index([teamId, seasonId])
+}
+
+/// Cross-process lease so only one backend instance/CLI runs a sync at a time.
+model SyncLock {
+  name      String   @id
+  owner     String
+  expiresAt DateTime
+}

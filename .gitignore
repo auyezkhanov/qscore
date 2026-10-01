@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Secrets and local config (templates live in .env.example)
+.env
+.env.*
+!.env.example
+
+# Deploy tooling state
+.vercel/
+.railway/
+
+# Playwright
+frontend/e2e-report/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+
+# Local AI tooling (skills, agents, session settings)
+.agents/
+.claude/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

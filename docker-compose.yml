@@ -1,0 +1,56 @@
+name: qscore
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qscore
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qscore}
+      POSTGRES_DB: qscore
+    ports:
+      # Bound to localhost: the database and the raw API are not exposed to the network.
+      - "127.0.0.1:${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - qscore_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qscore -d qscore"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    # Time for the running sync job to finish and release its lock on shutdown.
+    stop_grace_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://qscore:${POSTGRES_PASSWORD:-qscore}@postgres:5432/qscore?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:15173}
+      DEEPL_API_KEY: ${DEEPL_API_KEY:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:15173}
+    ports:
+      - "127.0.0.1:${API_PORT:-14000}:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-15173}:80"
+
+volumes:
+  qscore_pg:

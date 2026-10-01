@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens (space-separated RGB channels so Tailwind can apply opacity). */
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: 243 245 247;
+    --surface: 255 255 255;
+    --surface-2: 243 246 248;
+    --surface-3: 233 237 241;
+    --line: 228 232 236;
+    --ink: 14 21 28;
+    --ink-2: 72 85 98;
+    --ink-3: 128 141 153;
+    --brand: 19 131 145;
+    --brand-fg: 255 255 255;
+    --live: 229 57 53;
+    --win: 0 152 95;
+    --draw: 128 138 148;
+    --loss: 221 54 54;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg: 7 11 15;
+    --surface: 15 21 27;
+    --surface-2: 22 30 38;
+    --surface-3: 30 40 50;
+    --line: 32 42 52;
+    --ink: 236 241 245;
+    --ink-2: 168 181 193;
+    --ink-3: 112 127 141;
+    --brand: 51 188 205;
+    --brand-fg: 4 24 29;
+    --live: 255 82 82;
+    --win: 46 199 113;
+    --draw: 141 148 153;
+    --loss: 255 75 75;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-bg;
+  }
+
+  ::selection {
+    @apply bg-brand-200 text-ink dark:bg-brand-800;
+  }
+}
+
+@layer components {
+  /* A content card: the base building block of every page. */
+  .card {
+    @apply rounded-card border border-line bg-surface shadow-card;
+  }
+
+  /* A row inside a card that reacts to hover (links, list items). */
+  .row-hover {
+    @apply transition-colors hover:bg-surface-2 active:bg-surface-3;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full border-2 border-solid border-transparent bg-surface-3 bg-clip-padding;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

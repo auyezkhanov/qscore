@@ -1,0 +1,6 @@
+# LF everywhere: Prisma migration checksums and Docker shell scripts break on CRLF.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
