@@ -28,30 +28,33 @@ export function whenIdle(): Promise<unknown> {
   return runningPromise ?? Promise.resolve();
 }
 
+/** "skipped": another job held the lock, so this one never started (worth retrying soon). */
+export type JobOutcome = "done" | "failed" | "skipped";
+
 /**
  * Runs a job unless another one is in progress here or in any other process
  * (database lease), and records the outcome in SyncRun.
  */
-export async function runExclusive(job: JobName, fn: () => Promise<void>): Promise<boolean> {
+export async function runExclusive(job: JobName, fn: () => Promise<void>): Promise<JobOutcome> {
   if (running) {
     log.debug(`${job} sync skipped: ${running} sync still running`);
-    return false;
+    return "skipped";
   }
   running = job;
-  const run = (async () => {
+  const run = (async (): Promise<JobOutcome> => {
     let release: (() => Promise<void>) | null = null;
     const startedAt = new Date();
     try {
       release = await tryAcquire("sync");
       if (!release) {
         log.debug(`${job} sync skipped: another process holds the sync lock`);
-        return false;
+        return "skipped";
       }
       await prisma.syncRun.upsert({ where: { job }, create: { job, lastStartedAt: startedAt }, update: { lastStartedAt: startedAt } });
       await fn();
       await prisma.syncRun.update({ where: { job }, data: { lastSuccessAt: new Date(), lastError: null } });
       log.info(`${job} sync finished in ${((Date.now() - startedAt.getTime()) / 1000).toFixed(1)}s`);
-      return true;
+      return "done";
     } catch (err) {
       log.error(`${job} sync failed`, err);
       await prisma.syncRun
@@ -61,7 +64,7 @@ export async function runExclusive(job: JobName, fn: () => Promise<void>): Promi
           update: { lastError: err instanceof Error ? err.message : String(err) },
         })
         .catch(() => undefined);
-      return false;
+      return "failed";
     } finally {
       await release?.();
     }

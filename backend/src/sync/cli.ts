@@ -8,8 +8,9 @@ async function main() {
   const arg = process.argv[2] ?? "full";
   if (!(arg in JOBS)) throw new Error(`unknown job "${arg}", expected one of: ${Object.keys(JOBS).join(", ")}`);
   const job = arg as JobName;
-  const ok = await runExclusive(job, JOBS[job]);
-  process.exitCode = ok ? 0 : 1;
+  const outcome = await runExclusive(job, JOBS[job]);
+  if (outcome === "skipped") console.error(`${job} sync skipped: another sync is running (lock held)`);
+  process.exitCode = outcome === "done" ? 0 : 1;
 }
 
 main()
